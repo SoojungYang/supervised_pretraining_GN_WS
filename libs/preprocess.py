@@ -7,7 +7,7 @@ from rdkit.Chem.Descriptors import ExactMolWt
 from rdkit.Chem.Crippen import MolLogP, MolMR
 from rdkit.Chem.rdMolDescriptors import CalcTPSA
 
-from libs.sas_scorer import *
+# from libs.sas_scorer import *
 
 atom_vocab = ['C', 'N', 'O', 'S', 'F', 'H', 'Si', 'P', 'Cl', 'Br',
               'Li', 'Na', 'K', 'Mg', 'Ca', 'Fe', 'As', 'Al', 'I', 'B',
