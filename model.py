@@ -16,6 +16,7 @@ class Model(tf.keras.Model):
                  embed_use_ffnn=True,
                  embed_dp_rate=0.1,
                  embed_nm_type='gn',
+                 num_groups=8,
                  last_activation=None):
         super(Model, self).__init__()
 
@@ -24,7 +25,7 @@ class Model(tf.keras.Model):
 
         self.first_embedding = layers.Dense(embed_dim, use_bias=False)
         self.node_embedding = [NodeEmbedding(embed_dim, num_embed_heads,
-                                             embed_use_ffnn, embed_dp_rate, embed_nm_type)
+                                             embed_use_ffnn, embed_dp_rate, embed_nm_type, num_groups)
                                for _ in range(num_embed_layers)]
 
         self.fine_tuners = []
