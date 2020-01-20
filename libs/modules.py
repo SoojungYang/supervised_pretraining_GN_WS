@@ -15,7 +15,8 @@ class NodeEmbedding(layers.Layer):
                  num_heads,
                  use_ffnn,
                  dropout_rate,
-                 nm_type='gn'):
+                 nm_type='gn',
+                 num_groups=8):
         super(NodeEmbedding, self).__init__()
 
         pre_act = True
@@ -31,7 +32,7 @@ class NodeEmbedding(layers.Layer):
 
         if nm_type == 'gn':
             # TODO: Fix group norm axis (channels last setup)
-            self.norm = tfa.layers.GroupNormalization(groups=8, axis=-1)
+            self.norm = tfa.layers.GroupNormalization(groups=num_groups, axis=-1)
         else:
             self.norm = tf.keras.layers.LayerNormalization()
 
