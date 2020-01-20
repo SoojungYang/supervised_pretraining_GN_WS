@@ -231,6 +231,7 @@ def main(_):
             embed_use_ffnn=FLAGS.embed_use_ffnn,
             embed_dp_rate=FLAGS.embed_dp_rate,
             embed_nm_type=FLAGS.embed_nm_type,
+            num_groups=FLAGS.num_groups,
             last_activation=last_activation
     )
     print_model_spec()
@@ -282,6 +283,8 @@ if __name__ == '__main__':
                         help='Dropout rates in node embedding layers')
     parser.add_argument("--embed_nm_type", type=str, default='gn',
                         help='Type of normalization: gn or ln')
+    parser.add_argument("--num_groups", type=int, default=8,
+                        help='Number of groups for group normalization')
     parser.add_argument('--prior_length', type=float, default=1e-4,
                         help='Weight decay coefficient')
 
