@@ -31,18 +31,13 @@ def atom_feature(atom):
     )
 
 
-def convert_smiles_to_X(smi):
+def convert_smiles_to_graph(smi):
     mol = Chem.MolFromSmiles(smi.numpy())
     if mol is not None:
         feature = np.asarray([atom_feature(atom) for atom in mol.GetAtoms()])
-        return feature
-
-
-def convert_smiles_to_A(smi):
-    mol = Chem.MolFromSmiles(smi.numpy())
-    if mol is not None:
         adj = Chem.rdmolops.GetAdjacencyMatrix(mol)
-        return adj
+        graph = (feature, adj)
+        return graph
 
 
 def calc_properties(smi):
@@ -53,25 +48,7 @@ def calc_properties(smi):
     # sas = calculateScore(m)
     mw = ExactMolWt(m)
     mr = MolMR(m)
-    return np.asarray([logP, tpsa, mw, mr], dtype=np.float32)
-
-
-def preprocess_inputs(smi_list, save_path):
-    random.shuffle(smi_list)
-    f = open(save_path + '.txt', 'w')
-    prop_list = []
-    for smi in smi_list:
-        try:
-            props = calc_properties(smi)
-            prop_list.append(props)
-            f.write(smi)
-        except:
-            print("failed to calculate: ", smi)
-    f.close()
-    prop_list = np.asarray(prop_list)
-    np.save(save_path + '.npy', prop_list)
-    print("Total ", prop_list.shape[0], "Finish saving!")
-    return
+    return logP, tpsa, mw, mr
 
 
 if __name__ == '__main__':
