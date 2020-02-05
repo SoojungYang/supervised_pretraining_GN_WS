@@ -35,7 +35,7 @@ def convert_smiles_to_graph(smi):
     mol = Chem.MolFromSmiles(smi.numpy())
     if mol is not None:
         feature = np.asarray([atom_feature(atom) for atom in mol.GetAtoms()])
-        adj = Chem.rdmolops.GetAdjacencyMatrix(mol)
+        adj = np.asarray(Chem.rdmolops.GetAdjacencyMatrix(mol))
         graph = (feature, adj)
         return graph
 
@@ -48,7 +48,7 @@ def calc_properties(smi):
     # sas = calculateScore(m)
     mw = ExactMolWt(m)
     mr = MolMR(m)
-    return logP, tpsa, mw, mr
+    return np.asarray(logP), np.asarray(tpsa), np.asarray(mw), np.asarray(mr)
 
 
 if __name__ == '__main__':
@@ -56,4 +56,3 @@ if __name__ == '__main__':
     save_path = sys.argv[2]
     smi_list = open(smi_file, 'r').readlines()
     preprocess_inputs(smi_list, save_path)
-
