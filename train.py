@@ -20,12 +20,9 @@ FLAGS = None
 np.set_printoptions(3)
 tf.random.set_seed(1234)
 
-# For debugging let's not use GPU
-tf.config.experimental.set_visible_devices([], 'GPU')
-"""
 cmd = set_cuda_visible_device(1)
 print("Using ", cmd[:-1], "-th GPU")
-os.environ["CUDA_VISIBLE_DEVICES"] = cmd[:-1]"""
+os.environ["CUDA_VISIBLE_DEVICES"] = cmd[:-1]
 
 def evaluation_step(model, dataset, multitask_metrics, model_name='', mc_dropout=False, save_outputs=False):
 
@@ -74,24 +71,22 @@ def get_dataset(smi):
         return {'x': x, 'a': a}
 
     smi = tf.data.Dataset.from_tensor_slices(smi)
-    smi = smi.prefetch(tf.data.experimental.AUTOTUNE)
     smi = smi.shuffle(FLAGS.shuffle_buffer_size)
-
     ds = smi.map(
         lambda x: tf.py_function(func=convert_smiles_to_graph,
                                  inp=[x],
                                  Tout=[tf.float32, tf.float32]),
-        num_parallel_calls=7)
+    num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds = ds.padded_batch(FLAGS.batch_size, padded_shapes=([None, 58], [None, None]))
     ds = ds.map(x_to_dict)
 
     y = smi.map(
         lambda x: tf.py_function(func=calc_properties,
                                  inp=[x], Tout=[tf.float32, tf.float32, tf.float32, tf.float32]),
-                                 num_parallel_calls=7)
+    num_parallel_calls=tf.data.experimental.AUTOTUNE)
     y = y.padded_batch(FLAGS.batch_size, padded_shapes=([],[],[],[]))
-
     ds = tf.data.Dataset.zip((ds, y))
+    ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
     return ds
 
 
@@ -108,7 +103,7 @@ def train(model, smi):
     ckpt_path = './save/' + model_name
     tsbd_path = './log/' + model_name
 
-    num_train = int(len(smi) * 0.2)
+    num_train = int(len(smi) * 0.8)
     test_smi = smi[num_train:]
     train_smi = smi[:num_train]
     train_ds = get_dataset(train_smi)
@@ -148,9 +143,9 @@ def train(model, smi):
         keras.callbacks.ModelCheckpoint(
             filepath=ckpt_path,
             monitor='val_loss',
-            save_best_only=True,
+            save_best_only=False,
             save_freq='epoch',
-            verbose=0
+            verbose=1
         ),
         keras.callbacks.TensorBoard(
             log_dir=tsbd_path,
@@ -285,7 +280,7 @@ if __name__ == '__main__':
     # Hyper-parameters for training
     parser.add_argument('--batch_size', type=int, default=128,
                         help='Batch size')
-    parser.add_argument('--num_epoches', type=int, default=10,
+    parser.add_argument('--num_epoches', type=int, default=50,
                         help='Number of epoches')
     parser.add_argument('--init_lr', type=float, default=1e-3,
                         help='Initial learning rate,\
