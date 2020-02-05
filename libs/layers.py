@@ -11,9 +11,9 @@ def feed_forward_net(dim):
 
 # weight standardization regularization
 def ws_reg(kernel):
-    kernel_mean = tf.math.reduce_mean(kernel, axis=[0, 1, 2], keepdims=True, name='kernel_mean')
+    kernel_mean = tf.math.reduce_mean(kernel, axis=[0, 1], keepdims=True, name='kernel_mean')
     kernel = kernel - kernel_mean
-    kernel_std = tf.keras.backend.std(kernel, axis=[0, 1, 2], keepdims=True)
+    kernel_std = tf.keras.backend.std(kernel, axis=[0, 1], keepdims=True)
     kernel = kernel / (kernel_std + 1e-5)
     return kernel
 

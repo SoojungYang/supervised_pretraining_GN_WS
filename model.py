@@ -1,4 +1,7 @@
+import numpy as np
+
 import tensorflow as tf
+from tensorflow import keras
 from tensorflow.keras import layers
 
 from libs.modules import NodeEmbedding
@@ -7,7 +10,7 @@ from libs.modules import FineTuner
 
 class Model(tf.keras.Model):
     def __init__(self,
-                 num_props,
+                 list_props,
                  num_embed_layers,
                  embed_dim,
                  finetune_dim,
@@ -21,7 +24,7 @@ class Model(tf.keras.Model):
         super(Model, self).__init__()
 
         self.num_embed_layers = num_embed_layers
-        self.num_props = num_props
+        self.num_props = len(list_props)
 
         self.first_embedding = layers.Dense(embed_dim, use_bias=False)
         self.node_embedding = [NodeEmbedding(embed_dim, num_embed_heads,
@@ -29,20 +32,17 @@ class Model(tf.keras.Model):
                                for _ in range(num_embed_layers)]
 
         self.fine_tuners = []
-        for i in range(num_props):
-            self.fine_tuners.append(FineTuner(num_finetune_heads, finetune_dim, last_activation[i]))
+        for i in range(self.num_props):
+            self.fine_tuners.append(FineTuner(num_finetune_heads, finetune_dim, last_activation[i], name=list_props[i]))
 
-    def call(self, x, adj, training):
+    def call(self, data, training):
+        x = data['x']
+        adj = data['a']
         h = self.first_embedding(x)
         for i in range(self.num_embed_layers):
             h = self.node_embedding[i](h, adj, training)
-
         outputs = []
         for i in range(self.num_props):
-            outputs.append(self.fine_tuners[i](h))
-        outputs = tf.transpose(tf.squeeze(outputs))
-        return outputs
-
-
-
-
+            output = tf.squeeze(self.fine_tuners[i](h))
+            outputs.append(tf.reshape(output, [-1]))
+        return outputs[0], outputs[1], outputs[2], outputs[3]

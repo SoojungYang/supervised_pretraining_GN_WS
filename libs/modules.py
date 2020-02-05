@@ -54,12 +54,14 @@ class FineTuner(layers.Layer):
     def __init__(self,
                  num_heads,
                  out_dim,
-                 last_activation):
+                 last_activation,
+                 name='output'):
         super(FineTuner, self).__init__()
+        self.out_dim = out_dim
         self.readout = PMAReadout(out_dim, num_heads)
-        self.dense = layers.Dense(1, activation=last_activation)
+        self.dense = layers.Dense(1, input_shape=[out_dim], activation=last_activation, name=name)
 
     def call(self, x):
         x = self.readout(x)
-        z = self.dense(x)
+        z = self.dense(tf.reshape(x, [-1, self.out_dim]))
         return z

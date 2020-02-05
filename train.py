@@ -2,9 +2,11 @@ import argparse
 import os
 import sys
 import time
+import datetime
 
 import numpy as np
 import tensorflow as tf
+from tensorflow import keras
 import tensorflow_addons as tfa
 from absl import app
 from absl import logging
@@ -13,18 +15,14 @@ from libs.utils import *
 from libs.preprocess import *
 from model import *
 
-# TODO: attach tensorboard
 
 FLAGS = None
 np.set_printoptions(3)
 tf.random.set_seed(1234)
 
-# For debugging let's not use GPU
-"""
 cmd = set_cuda_visible_device(1)
 print("Using ", cmd[:-1], "-th GPU")
 os.environ["CUDA_VISIBLE_DEVICES"] = cmd[:-1]
-"""
 
 def evaluation_step(model, dataset, multitask_metrics, model_name='', mc_dropout=False, save_outputs=False):
 
@@ -67,64 +65,32 @@ def evaluation_step(model, dataset, multitask_metrics, model_name='', mc_dropout
         return
 
 
-def train_step(model, optimizer, loss_fn, dataset, multitask_metrics):
-    st = time.time()
-    for (batch, (x, adj, labels)) in enumerate(dataset):
-        with tf.GradientTape() as tape:
-            preds = model(x, adj, True)
-            loss = loss_fn(labels, preds)
-        grads = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(grads, model.trainable_variables))
-        for i in range(len(multitask_metrics)):
-            for metric in multitask_metrics[i]:
-                metric(labels[i], preds[i])
-    et = time.time()
-
-    print("Train ", end='')
-    for i in range(len(multitask_metrics[i])):
-        for metric in multitask_metrics[i]:
-            print(FLAGS.prop[i], end='')
-            print(metric.name + ':', metric.result().numpy(), ' ', end='')
-            metric.reset_states()
-    print("Time:", round(et - st, 3))
-
-    return
-
 
 def get_dataset(smi):
+    def x_to_dict(x, a):
+        return {'x': x, 'a': a}
+
     smi = tf.data.Dataset.from_tensor_slices(smi)
-    smi = smi.prefetch(tf.data.experimental.AUTOTUNE)
     smi = smi.shuffle(FLAGS.shuffle_buffer_size)
-    X = smi.map(
-        lambda x: tf.py_function(func=convert_smiles_to_X,
+    ds = smi.map(
+        lambda x: tf.py_function(func=convert_smiles_to_graph,
                                  inp=[x],
-                                 Tout=tf.float32),
-                                 num_parallel_calls=7)
-
-    X = X.apply(tf.data.experimental.ignore_errors())
-
-    A = smi.map(
-        lambda x: tf.py_function(func=convert_smiles_to_A,
-                                 inp=[x],
-                                 Tout=tf.float32),
-                                 num_parallel_calls=7)
-    A = A.apply(tf.data.experimental.ignore_errors())
+                                 Tout=[tf.float32, tf.float32]),
+    num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    ds = ds.padded_batch(FLAGS.batch_size, padded_shapes=([None, 58], [None, None]))
+    ds = ds.map(x_to_dict)
 
     y = smi.map(
         lambda x: tf.py_function(func=calc_properties,
-                                 inp=[x], Tout=tf.float32),
-                                 num_parallel_calls=7)
-
-    X = X.padded_batch(FLAGS.batch_size, padded_shapes=([None, 58]))
-    A = A.padded_batch(FLAGS.batch_size, padded_shapes=([None, None]))
-    y = y.batch(FLAGS.batch_size)
-
-    ds = tf.data.Dataset.zip((X, A, y))
-    ds = ds.cache()
+                                 inp=[x], Tout=[tf.float32, tf.float32, tf.float32, tf.float32]),
+    num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    y = y.padded_batch(FLAGS.batch_size, padded_shapes=([],[],[],[]))
+    ds = tf.data.Dataset.zip((ds, y))
+    ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
     return ds
 
 
-def train(model, train_smi, test_smi):
+def train(model, smi):
     model_name = FLAGS.prefix
     model_name += '_' + str(FLAGS.num_embed_layers)
     model_name += '_' + str(FLAGS.embed_dim)
@@ -135,7 +101,11 @@ def train(model, train_smi, test_smi):
     model_name += '_' + str(FLAGS.prior_length)
     model_name += '_' + str(FLAGS.embed_nm_type)
     ckpt_path = './save/' + model_name
+    tsbd_path = './log/' + model_name
 
+    num_train = int(len(smi) * 0.8)
+    test_smi = smi[num_train:]
+    train_smi = smi[:num_train]
     train_ds = get_dataset(train_smi)
     test_ds = get_dataset(test_smi)
 
@@ -145,7 +115,6 @@ def train(model, train_smi, test_smi):
         values=[1.0, 0.1, 0.01],
     )
     lr = lambda: FLAGS.init_lr * schedule(step)
-
     coeff = FLAGS.prior_length * (1.0 - FLAGS.embed_dp_rate)
     wd = lambda: coeff * schedule(step)
 
@@ -157,35 +126,45 @@ def train(model, train_smi, test_smi):
         epsilon=FLAGS.opt_epsilon
     )
 
-    checkpoint = tf.train.Checkpoint(
-        model=model,
-        optimizer=optimizer
-    )
-    ckpt_manager = tf.train.CheckpointManager(
-        checkpoint=checkpoint,
-        directory=ckpt_path,
-        max_to_keep=FLAGS.max_to_keep
-    )
+    # logP, TPSA, MR, MW
+    model.compile(optimizer=optimizer,
+                  loss={'output_1': keras.losses.MeanSquaredError(),
+                        'output_2': keras.losses.MeanSquaredError(),
+                        'output_3': keras.losses.MeanSquaredError(),
+                        'output_4': keras.losses.MeanSquaredError()},
+                  metrics={'output_1': keras.metrics.MeanSquaredError(),
+                           'output_2': keras.metrics.MeanSquaredError(),
+                           'output_3': keras.metrics.MeanSquaredError(),
+                           'output_4': keras.metrics.MeanSquaredError()},
+                  loss_weights={'output_1': 2., 'output_2': 2., 'output_3': 2., 'output_4': 1.}
+                  )
 
-    multitask_metrics = []
-    for prop in FLAGS.prop:
-        metrics = get_metric_list(FLAGS.loss_dict[prop])
-        multitask_metrics.append(metrics)
-
-    start_epoch = 0
-    if ckpt_manager.latest_checkpoint:
-        start_epoch = int(ckpt_manager.latest_checkpoint.split('-')[-1])
-
-    loss_fn = MultitaskLoss(prop_list=FLAGS.prop, loss_dict=FLAGS.loss_dict)
+    callbacks = [
+        keras.callbacks.ModelCheckpoint(
+            filepath=ckpt_path,
+            monitor='val_loss',
+            save_best_only=False,
+            save_freq='epoch',
+            verbose=1
+        ),
+        keras.callbacks.TensorBoard(
+            log_dir=tsbd_path,
+            histogram_freq=1,
+            embeddings_freq=1,
+            update_freq='epoch'
+        )
+    ]
 
     st_total = time.time()
-    for epoch in range(start_epoch, FLAGS.num_epoches):
-        step = step.assign(epoch + 1)
-        print(epoch, "-th epoch is running \t LR:", optimizer.lr.numpy())
-        train_step(model, optimizer, loss_fn, train_ds, multitask_metrics)
-        evaluation_step(model, test_ds, multitask_metrics)
-        if FLAGS.save_model:
-            ckpt_manager.save()
+    print("model compiled and callbacks set")
+
+
+    history = model.fit(train_ds,
+                        epochs=FLAGS.num_epoches,
+                        callbacks=callbacks,
+                        validation_data=test_ds)
+    print('\n', history.history)
+
     et_total = time.time()
     print("Total time for training:", round(et_total - st_total, 3))
 
@@ -222,7 +201,7 @@ def main(_):
             last_activation.append(tf.nn.sigmoid)
 
     model = Model(
-            num_props=len(FLAGS.prop),
+            list_props=FLAGS.prop,
             num_embed_layers=FLAGS.num_embed_layers,
             embed_dim=FLAGS.embed_dim,
             finetune_dim=FLAGS.finetune_dim,
@@ -236,13 +215,9 @@ def main(_):
     )
     print_model_spec()
 
-    train_data = open('./data/smiles_test.txt', 'r')
-    train_data = [line.strip('\n') for line in train_data.readlines()]
-    num_train = int(len(train_data) * 0.8)
-    test_data = train_data[num_train:]
-    train_data = train_data[:num_train]
-
-    train(model, train_data, test_data)
+    smi_data = open('./data/smiles_test.txt', 'r')
+    smi_data = [line.strip('\n') for line in smi_data.readlines()]
+    train(model, smi_data)
     return
 
 
@@ -305,7 +280,7 @@ if __name__ == '__main__':
     # Hyper-parameters for training
     parser.add_argument('--batch_size', type=int, default=128,
                         help='Batch size')
-    parser.add_argument('--num_epoches', type=int, default=10,
+    parser.add_argument('--num_epoches', type=int, default=50,
                         help='Number of epoches')
     parser.add_argument('--init_lr', type=float, default=1e-3,
                         help='Initial learning rate,\
@@ -322,8 +297,6 @@ if __name__ == '__main__':
                         help='Decay rate for stair learning rate scheduling')
     parser.add_argument('--max_to_keep', type=int, default=5,
                         help='Maximum number of checkpoint files to be kept')
-    parser.add_argument("--save_model", type=str2bool, default=True,
-                        help='Whether to save checkpoints')
 
     # Hyper-parameters for evaluation
     parser.add_argument("--save_outputs", type=str2bool, default=True,
