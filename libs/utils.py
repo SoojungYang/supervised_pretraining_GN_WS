@@ -99,3 +99,14 @@ def get_metric_list(loss_type):
         ]
 
     return metrics
+
+
+def get_task_options(benchmark_task_type):
+    if benchmark_task_type == 'reg':
+        # last_activation, loss, metrics
+        return None, keras.losses.MeanSquaredError(), [keras.metrics.MeanSquaredError()]
+    else:
+        return keras.activations.sigmoid, keras.losses.BinaryCrossentropy(), [keras.metrics.BinaryAccuracy(),
+                                                                              keras.metrics.AUC()]
+
+

@@ -51,6 +51,12 @@ def calc_properties(smi):
     return np.asarray(logP), np.asarray(tpsa), np.asarray(mw), np.asarray(mr)
 
 
+def logP_benchmark(smi):
+    m = Chem.MolFromSmiles(smi.numpy())
+    logP = MolLogP(m)
+    return np.asarray(logP)
+
+
 if __name__ == '__main__':
     smi_file = sys.argv[1]
     save_path = sys.argv[2]
