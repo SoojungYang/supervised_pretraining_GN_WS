@@ -12,6 +12,7 @@ REFERENCE: https://arxiv.org/pdf/1912.11370.pdf
 - [ ] Data preparation
     - [ ] Data acquisition (ZINC, tox21, HIV, ...)
     - [ ] generalize get_dataset function
+
 ####Benchmark
 - [ ] logging outputs
 - [ ] add attention to prediction layer
