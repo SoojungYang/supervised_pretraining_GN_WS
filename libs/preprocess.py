@@ -15,6 +15,12 @@ atom_vocab = ['C', 'N', 'O', 'S', 'F', 'H', 'Si', 'P', 'Cl', 'Br',
               'Ge', 'Cu', 'Au', 'Ni', 'Cd', 'Mn', 'Cr', 'Pt', 'Hg', 'Pb']
 
 
+LOGP_MEAN, LOGP_STD = 2.5451961055624057, 2.3098259954263725
+MR_MEAN, MR_STD = 1.8846996475240654, 0.214787515251564
+TPSA_MEAN, TPSA_STD = 1.7127172870304095, 0.4237963371365658
+MW_MEAN, MW_STD = 2.4614866916977736, 0.20207222102872363
+
+
 def atom_feature(atom):
     def one_of_k_encoding_unk(x, allowable_set):
         """Maps inputs not in the allowable set to the last element."""
@@ -42,13 +48,25 @@ def convert_smiles_to_graph(smi):
 
 def calc_properties(smi):
     # returns logP, TPSA, MW, MR
+    # normalize quantities
     m = Chem.MolFromSmiles(smi.numpy())
-    logP = MolLogP(m)
-    tpsa = CalcTPSA(m)
+    logP = np.asarray(MolLogP(m))
+    logP = (logP - LOGP_MEAN) / LOGP_STD
+
+    tpsa = np.asarray(CalcTPSA(m))
+    tpsa = np.log10(tpsa + 1)
+    tpsa = (tpsa - TPSA_MEAN) / TPSA_STD
+
     # sas = calculateScore(m)
-    mw = ExactMolWt(m)
-    mr = MolMR(m)
-    return np.asarray(logP), np.asarray(tpsa), np.asarray(mw), np.asarray(mr)
+
+    mw = np.asarray(ExactMolWt(m))
+    mw = np.log10(mw + 1)
+    mw = (mw - MW_MEAN) / MW_STD
+
+    mr = np.asarray(MolMR(m))
+    mr = np.log10(mr + 1)
+    mr = (mr - MR_MEAN) / MR_STD
+    return logP, tpsa, mw, mr
 
 
 def logP_benchmark(smi):

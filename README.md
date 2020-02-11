@@ -11,8 +11,9 @@ REFERENCE: https://arxiv.org/pdf/1912.11370.pdf
 - [ ] Hyper-parameter tuning
 - [ ] Data preparation
     - [ ] Data acquisition (ZINC, tox21, HIV, ...)
+    - [x] Normalize property values
     - [ ] generalize get_dataset function
 
-####Benchmark
+#### Benchmark
 - [ ] logging outputs
 - [ ] add attention to prediction layer
